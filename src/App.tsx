@@ -1,4 +1,5 @@
 import AgoraUIKit, { StylePropInterface } from "agora-react-uikit";
+import "agora-react-uikit/dist/index.css";
 import AgoraRTC, {
   IAgoraRTCClient,
   ScreenVideoTrackInitConfig,
@@ -60,7 +61,7 @@ export default function App() {
       scalabiltyMode: "",
       selfBrowserSurface: "include",
       surfaceSwitching: "exclude",
-      // screenShareCaptureFrameRate: 30
+      // screenShareCaptureFrameRate: ""
     };
 
     let screenTrack;
@@ -76,14 +77,14 @@ export default function App() {
       screenTrack = await AgoraRTC.createScreenVideoTrack(screenTrackConfig);
     }
 
-    if (Array.isArray(screenTrack)) {
-      // If screenTrack is an array, it contains both video and audio tracks
-      await client.publish(screenTrack);
-    } else {
-      // If screenTrack is not an array, it's just the video track
-      await client.publish(screenTrack);
-    }
-
+    // if (Array.isArray(screenTrack)) {
+    //   // If screenTrack is an array, it contains both video and audio tracks
+    //   await client.publish(screenTrack);
+    // } else {
+    //   // If screenTrack is not an array, it's just the video track
+    //   await client.publish(screenTrack);
+    // }
+    await client.publish(screenTrack);
     setScreenClient(client);
     setIsScreenSharing(true);
   }
@@ -124,7 +125,7 @@ export default function App() {
         flexDirection: "column",
       }}
     >
-      <div style={{ flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
         <AgoraUIKit
           rtcProps={rtcProps}
           callbacks={callbacks}
