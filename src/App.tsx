@@ -14,6 +14,8 @@ const TOKEN = import.meta.env.VITE_AGORA_TOKEN;
 export default function App() {
   const [videoCall, setVideoCall] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [localAudioTrack, setLocalAudioTrack] = useState<any>(null);
+  const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
   const [screenClient, setScreenClient] = useState<IAgoraRTCClient | null>(
     null
   );
@@ -26,20 +28,52 @@ export default function App() {
 
   const callbacks = {
     EndCall: () => setVideoCall(false),
+    LocalMuteAudio: (muted: boolean) => {
+      if (localAudioTrack) {
+        muted ? localAudioTrack.mute() : localAudioTrack.unmute();
+      }
+    },
+    LocalMuteVideo: (muted: boolean) => {
+      if (localVideoTrack) {
+        muted ? localVideoTrack.mute() : localVideoTrack.unmute();
+      }
+    },
+    UserJoined: (user: any) => {
+      console.log("User joined:", user);
+    },
+    UserLeft: (user: any) => {
+      console.log("User left:", user);
+    },
   };
 
   const styleProps: StylePropInterface = {
     theme: "dark",
     videoMode: { max: "contain" },
     remoteBtnStyles: {
-      muteRemoteAudio: { backgroundColor: "rgba(255, 255, 255, 0.4)" },
-      muteRemoteVideo: { backgroundColor: "rgba(255, 255, 255, 0.4)" },
+      muteRemoteAudio: {
+        // backgroundColor: "transparent",
+        display: "none",
+      },
+      muteRemoteVideo: {
+        // backgroundColor: "transparent",
+        display: "none",
+      },
     },
     localBtnStyles: {
-      muteLocalAudio: { backgroundColor: "rgba(255, 255, 255, 0.4)" },
-      muteLocalVideo: { backgroundColor: "rgba(255, 255, 255, 0.4)" },
-      switchCamera: { backgroundColor: "rgba(255, 255, 255, 0.4)" },
-      endCall: { backgroundColor: "rgba(255, 80, 80, 0.8)" },
+      muteLocalAudio: {
+        backgroundColor: "rgba(255, 255, 255, 0.4)",
+        display: "none",
+      },
+      muteLocalVideo: {
+        backgroundColor: "rgba(255, 255, 255, 0.4)",
+        display: "none",
+      },
+      switchCamera: {
+        backgroundColor: "rgba(255, 255, 255, 0.4)",
+        display: "none",
+      },
+      endCall: { backgroundColor: "blue", display: "none" },
+      screenshare: { border: "10px solid red" },
     },
     maxViewStyles: {
       borderColor: "#fff",
@@ -116,6 +150,17 @@ export default function App() {
     }
   };
 
+  const toggleAudio = () => {
+    if (localAudioTrack) {
+      localAudioTrack.setEnabled(!localAudioTrack.enabled);
+    }
+  };
+
+  const toggleVideo = () => {
+    if (localVideoTrack) {
+      localVideoTrack.setEnabled(!localVideoTrack.enabled);
+    }
+  };
   return videoCall ? (
     <div
       style={{
@@ -131,6 +176,23 @@ export default function App() {
           callbacks={callbacks}
           styleProps={styleProps}
         />
+      </div>
+      <div className="controls-container">
+        <button onClick={toggleAudio} className="control-btn">
+          {localAudioTrack?.enabled ? "Mute Audio" : "Unmute Audio"}
+        </button>
+        <button onClick={toggleVideo} className="control-btn">
+          {localVideoTrack?.enabled ? "Disable Video" : "Enable Video"}
+        </button>
+        <button onClick={toggleScreenShare} className="control-btn">
+          {isScreenSharing ? "Stop Screen Share" : "Start Screen Share"}
+        </button>
+        <button
+          onClick={() => setVideoCall(false)}
+          className="control-btn end-call"
+        >
+          End Call
+        </button>
       </div>
       <div style={{ padding: "10px", textAlign: "center" }}>
         <button
