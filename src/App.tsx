@@ -1,129 +1,82 @@
-import AgoraUIKit, { StylePropInterface } from "agora-react-uikit";
+import AgoraUIKit, { layout } from "agora-react-uikit";
 import "agora-react-uikit/dist/index.css";
 import AgoraRTC, {
   IAgoraRTCClient,
   ScreenVideoTrackInitConfig,
 } from "agora-rtc-sdk-ng";
-import { useEffect, useState } from "react";
-import "./App.css";
-
+import React, { CSSProperties, useEffect, useState } from "react";
 const APP_ID = import.meta.env.VITE_AGORA_APP_ID;
-const CHANNEL = import.meta.env.VITE_AGORA_CHANNEL;
-const TOKEN = import.meta.env.VITE_AGORA_TOKEN;
+const AGORA_CHANNEL = import.meta.env.VITE_AGORA_CHANNEL;
+const AGORA_TOKEN = import.meta.env.VITE_AGORA_TOKEN;
 
-export default function App() {
-  const [videoCall, setVideoCall] = useState(true);
+const App: React.FunctionComponent = () => {
+  const [videocall, setVideocall] = useState(true);
+  const [isHost, setHost] = useState(true);
+  const [isPinned, setPinned] = useState(false);
+  const [username, setUsername] = useState("");
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [localAudioTrack, setLocalAudioTrack] = useState<any>(null);
-  const [localVideoTrack, setLocalVideoTrack] = useState<any>(null);
   const [screenClient, setScreenClient] = useState<IAgoraRTCClient | null>(
     null
   );
 
   const rtcProps = {
     appId: APP_ID,
-    channel: CHANNEL,
-    token: TOKEN,
+    channel: AGORA_CHANNEL,
+    token: AGORA_TOKEN,
+    role: isHost ? "host" : "audience",
+    layout: isPinned ? layout.pin : layout.grid,
+    enableScreensharing: true,
+    disableRtm: false,
   };
 
-  const callbacks = {
-    EndCall: () => setVideoCall(false),
-    LocalMuteAudio: (muted: boolean) => {
-      if (localAudioTrack) {
-        muted ? localAudioTrack.mute() : localAudioTrack.unmute();
-      }
-    },
-    LocalMuteVideo: (muted: boolean) => {
-      if (localVideoTrack) {
-        muted ? localVideoTrack.mute() : localVideoTrack.unmute();
-      }
-    },
-    UserJoined: (user: any) => {
-      console.log("User joined:", user);
-    },
-    UserLeft: (user: any) => {
-      console.log("User left:", user);
-    },
-  };
-
-  const styleProps: StylePropInterface = {
-    theme: "dark",
-    videoMode: { max: "contain" },
-    remoteBtnStyles: {
-      muteRemoteAudio: {
-        // backgroundColor: "transparent",
-        display: "none",
-      },
-      muteRemoteVideo: {
-        // backgroundColor: "transparent",
-        display: "none",
-      },
-    },
-    localBtnStyles: {
-      muteLocalAudio: {
-        backgroundColor: "rgba(255, 255, 255, 0.4)",
-        display: "none",
-      },
-      muteLocalVideo: {
-        backgroundColor: "rgba(255, 255, 255, 0.4)",
-        display: "none",
-      },
-      switchCamera: {
-        backgroundColor: "rgba(255, 255, 255, 0.4)",
-        display: "none",
-      },
-      endCall: { backgroundColor: "blue", display: "none" },
-      screenshare: { border: "10px solid red" },
-    },
-    maxViewStyles: {
-      borderColor: "#fff",
-      borderWidth: 4,
-    },
-  };
-
-  async function startScreenShare() {
+  const startScreenShare = async () => {
+    // Create a new Agora client for screen sharing
     const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
-    await client.join(APP_ID, CHANNEL, TOKEN);
-
-    const screenTrackConfig: ScreenVideoTrackInitConfig = {
-      encoderConfig: "1080p_1",
-      optimizationMode: "detail",
-      displaySurface: "browser",
-      systemAudio: "include",
-      electronScreenSourceId: "",
-      extensionId: "",
-      scalabiltyMode: "",
-      selfBrowserSurface: "include",
-      surfaceSwitching: "exclude",
-      // screenShareCaptureFrameRate: ""
-    };
-
-    let screenTrack;
     try {
-      // Try to create screen video track with audio
-      screenTrack = await AgoraRTC.createScreenVideoTrack(
-        screenTrackConfig,
-        "enable"
-      );
+      // Attempt to join the channel
+      await client.join(rtcProps.appId, rtcProps.channel, rtcProps.token);
+
+      // Configuration for screen sharing
+      const screenTrackConfig: ScreenVideoTrackInitConfig = {
+        encoderConfig: "1080p_1",
+        optimizationMode: "detail",
+        // displaySurface: "browser",
+        // systemAudio: "include",
+      };
+
+      // Attempt to create a screen sharing track
+      let screenTrack;
+      try {
+        screenTrack = await AgoraRTC.createScreenVideoTrack(
+          screenTrackConfig,
+          "enable"
+        );
+      } catch (error) {
+        console.error("Failed to get screen track with audio:", error);
+        screenTrack = await AgoraRTC.createScreenVideoTrack(screenTrackConfig);
+      }
+
+      // If screenTrack is null or undefined, it means the user cancelled screen sharing
+      if (!screenTrack) {
+        console.error(
+          "No screen track created. User might have cancelled screen sharing."
+        );
+        await client.leave(); // Leave the channel if no track is created
+        return;
+      }
+
+      // Publish the screen track
+      await client.publish(screenTrack);
+      setScreenClient(client);
+      setIsScreenSharing(true);
     } catch (error) {
-      console.error("Failed to get screen track with audio:", error);
-      // If it fails, try without audio
-      screenTrack = await AgoraRTC.createScreenVideoTrack(screenTrackConfig);
+      console.error("Error starting screen share:", error);
+      // Ensure client leaves the channel if any error occurs
+      await client.leave();
     }
+  };
 
-    // if (Array.isArray(screenTrack)) {
-    //   // If screenTrack is an array, it contains both video and audio tracks
-    //   await client.publish(screenTrack);
-    // } else {
-    //   // If screenTrack is not an array, it's just the video track
-    //   await client.publish(screenTrack);
-    // }
-    await client.publish(screenTrack);
-    setScreenClient(client);
-    setIsScreenSharing(true);
-  }
-
-  async function stopScreenShare() {
+  const stopScreenShare = async () => {
     if (screenClient) {
       const localTracks = screenClient.localTracks;
       await screenClient.unpublish(localTracks);
@@ -132,15 +85,7 @@ export default function App() {
       setScreenClient(null);
       setIsScreenSharing(false);
     }
-  }
-
-  useEffect(() => {
-    return () => {
-      if (screenClient) {
-        stopScreenShare();
-      }
-    };
-  }, []);
+  };
 
   const toggleScreenShare = () => {
     if (isScreenSharing) {
@@ -150,67 +95,95 @@ export default function App() {
     }
   };
 
-  const toggleAudio = () => {
-    if (localAudioTrack) {
-      localAudioTrack.setEnabled(!localAudioTrack.enabled);
-    }
-  };
+  useEffect(() => {
+    return () => {
+      if (screenClient) {
+        stopScreenShare();
+      }
+    };
+  }, []);
 
-  const toggleVideo = () => {
-    if (localVideoTrack) {
-      localVideoTrack.setEnabled(!localVideoTrack.enabled);
-    }
-  };
-  return videoCall ? (
-    <div
-      style={{
-        display: "flex",
-        width: "100vw",
-        height: "100vh",
-        flexDirection: "column",
-      }}
-    >
-      <div style={{ display: "flex", width: "100vw", height: "100vh" }}>
-        <AgoraUIKit
-          rtcProps={rtcProps}
-          callbacks={callbacks}
-          styleProps={styleProps}
-        />
-      </div>
-      <div className="controls-container">
-        <button onClick={toggleAudio} className="control-btn">
-          {localAudioTrack?.enabled ? "Mute Audio" : "Unmute Audio"}
-        </button>
-        <button onClick={toggleVideo} className="control-btn">
-          {localVideoTrack?.enabled ? "Disable Video" : "Enable Video"}
-        </button>
-        <button onClick={toggleScreenShare} className="control-btn">
-          {isScreenSharing ? "Stop Screen Share" : "Start Screen Share"}
-        </button>
-        <button
-          onClick={() => setVideoCall(false)}
-          className="control-btn end-call"
-        >
-          End Call
-        </button>
-      </div>
-      <div style={{ padding: "10px", textAlign: "center" }}>
-        <button
-          onClick={toggleScreenShare}
-          style={{
-            padding: "10px 20px",
-            fontSize: "16px",
-            backgroundColor: isScreenSharing ? "green" : "white",
-            color: isScreenSharing ? "white" : "black",
-            border: "1px solid black",
-            cursor: "pointer",
-          }}
-        >
-          {isScreenSharing ? "Stop Screen Share" : "Start Screen Share"}
-        </button>
+  return (
+    <div style={styles.container}>
+      <div style={styles.videoContainer}>
+        <h1 style={styles.heading}>Agora React Web UI Kit</h1>
+        {videocall ? (
+          <>
+            <div style={styles.nav}>
+              {/* <p style={{ fontSize: 20, width: 200 }}>
+                You're {isHost ? "a host" : "an audience"}
+              </p>
+              <p style={styles.btn} onClick={() => setHost(!isHost)}>
+                Change Role
+              </p> */}
+              <p style={styles.btn} onClick={() => setPinned(!isPinned)}>
+                Change Layout
+              </p>
+              <p style={styles.btn} onClick={toggleScreenShare}>
+                {isScreenSharing ? "Stop Screen Share" : "Start Screen Share"}
+              </p>
+            </div>
+            <AgoraUIKit
+              rtcProps={{
+                appId: APP_ID,
+                channel: AGORA_CHANNEL,
+                token: AGORA_TOKEN,
+                role: isHost ? "host" : "audience",
+                layout: isPinned ? layout.pin : layout.grid,
+                // enableScreensharing: true,
+                disableRtm: false,
+              }}
+              rtmProps={{ username: username || "user", displayUsername: true }}
+              callbacks={{
+                EndCall: () => setVideocall(false),
+              }}
+            />
+          </>
+        ) : (
+          <div style={styles.nav}>
+            <input
+              style={styles.input}
+              placeholder="nickname"
+              type="text"
+              value={username}
+              onChange={(e) => {
+                setUsername(e.target.value);
+              }}
+            />
+            <h3 style={styles.btn} onClick={() => setVideocall(true)}>
+              Start Call
+            </h3>
+          </div>
+        )}
       </div>
     </div>
-  ) : (
-    <h3 onClick={() => setVideoCall(true)}>Join</h3>
   );
-}
+};
+
+const styles = {
+  container: {
+    width: "100vw",
+    height: "100vh",
+    display: "flex",
+    flex: 1,
+    backgroundColor: "#007bff22",
+  },
+  heading: { textAlign: "center" as const, marginBottom: 0 },
+  videoContainer: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+  } as CSSProperties,
+  nav: { display: "flex", justifyContent: "space-around" },
+  btn: {
+    backgroundColor: "#007bff",
+    cursor: "pointer",
+    borderRadius: 5,
+    padding: "4px 8px",
+    color: "#ffffff",
+    fontSize: 20,
+  },
+  input: { display: "flex", height: 24, alignSelf: "center" } as CSSProperties,
+};
+
+export default App;
